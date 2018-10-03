@@ -73,6 +73,7 @@
     <Compile Include="EnumConversionTests.cs" />
     <Compile Include="Functional\CombineTablesTests.cs" />
     <Compile Include="Functional\DottedKeyTests.cs" />
+    <Compile Include="Functional\HashSetSupportingTypesTests.cs" />
     <Compile Include="Functional\IgnorePropertyTests.cs" />
     <Compile Include="Functional\InlineTableTests.cs" />
     <Compile Include="Functional\InlineTableTests.Read.cs" />

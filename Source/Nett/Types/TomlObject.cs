@@ -157,13 +157,13 @@
             {
                 return (TomlObject)converter.Convert(root, val, Types.TomlObjectType);
             }
-            else if (val as IDictionary != null)
+            else if (val is IDictionary dict)
             {
-                return TomlTable.CreateFromDictionary(root, (IDictionary)val, root.Settings.GetTableType(t));
+                return TomlTable.CreateFromDictionary(root, dict, root.Settings.GetTableType(t));
             }
-            else if (t != Types.StringType && (val as IEnumerable) != null)
+            else if (t != Types.StringType && val is IEnumerable e)
             {
-                return CreateArrayType(root, (IEnumerable)val);
+                return CreateArrayType(root, e);
             }
             else
             {
