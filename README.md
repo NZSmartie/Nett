@@ -13,84 +13,7 @@ Examples:
 + -2h30m
 + 400m2000s
 
-# Getting Started
 
-Install it via NuGet:
-
-
-
-| Nett | Nett.Coma | Nett.AspNet |
-|------|-----------|-------------|
-| [![NuGet](https://img.shields.io/nuget/v/Nett.svg?maxAge=2592000)](https://www.nuget.org/packages/Nett/) | [![NuGet](https://img.shields.io/nuget/v/Nett.Coma.svg?maxAge=2592000)](https://www.nuget.org/packages/Nett.Coma/) | [![NuGet](https://img.shields.io/nuget/v/Nett.AspNet.svg?maxAge=2592000)](https://www.nuget.org/packages/Nett.AspNet/)
-
-All common 'TOML' operations are performed via the static class `Nett.Toml`. Although there are other
-types available from the library in general using that single type should be sufficient
-for most standard scenarios.
-
-The following example shows how you can write and read some complex object to/from a
-'TOML' file. The object that gets serialized and deserialized is defined as follows:
-
-```C#
-public class Configuration
-{
-    public bool EnableDebug { get; set; }
-    public Server Server { get; set; }
-    public Client Client { get; set; }
-}
-
-public class Server
-{
-    public TimeSpan Timeout { get; set; }
-}
-
-public class Client
-{
-    public string ServerAddress { get; set; }
-}
-```
-
-To write the above object to a 'TOML' File you have to do:
-
-```C#
-var config = new Configuration()
-{
-    EnableDebug = true,
-    Server = new Server() { Timeout = TimeSpan.FromMinutes(1) },
-    Client = new Client() { ServerAddress = "http://127.0.0.1:8080" },
-};
-
-Toml.WriteFile(config, "test.tml");
-```
-
-This will write the following content to your hard disk:
-
-```
-EnableDebug = true
-
-[Server]
-Timeout = 1m
-
-
-[Client]
-ServerAddress = "http://127.0.0.1:8080"
-
-
-```
-
-To read that back into your object you need to:
-
-```C#
-var config = Toml.ReadFile<Configuration>("test.tml");
-```
-
-If you only have a 'TOML' file but no corresponding class that the data in the 'TOML' file
-maps to, you can read the data into a generic TomlTable structure and extract a member
-the like:
-
-```C#
-TomlTable table = Toml.ReadFile("test.tml");
-var timeout = table.Get<TomlTable>("Server").Get<TimeSpan>("Timeout");
-```
 
 # Configuration
 
@@ -122,47 +45,6 @@ This will create a copy of the default configuration. The copy can be modified
 via a fluent configuration API.
 
 The following sections will show how this API can be used to support various use cases.
-
-## Deserializing types without default constructor
-If your type doesn't have a default constructor or is not constructible (interface or abstract
-class) 'Nett' will not be able to deserialize
-into that type without some help.
-
-Assume we have the following type, that extends the configuration class from the basic
-examples:
-
-```C#
-public class ConfigurationWithDepdendency : Configuration
-{
-    public ConfigurationWithDepdendency(object dependency)
-    {
-
-    }
-}
-```
-
-When you try to deserialize the `test.tml` into that type via
-
-```C#
-var config = Toml.ReadFile<ConfigurationWithDepdendency>("test.tml");
-```
-
-you will get the following exception:
-
-`Failed to create type 'ConfigurationWithDepdendency'. Only types with a parameterless constructor or an
-specialized creator can be created. Make sure the type has a parameterless constructor or a
-configuration with an corresponding creator is provided.`
-
-To make this work, we need to pass a custom configuration to the read method that tells 'Nett', how
-the type can be created. This is done the by:
-
-```C#
-var myConfig = TomlSettings.Create(cfg => cfg
-    .ConfigureType<ConfigurationWithDepdendency>(ct => ct
-        .CreateInstance(() => new ConfigurationWithDepdendency(new object()))));
-
-var config = Toml.ReadFile<ConfigurationWithDepdendency>("test.tml", myConfig);
-```
 
 ## Allowing / disallowing implicit conversions between types
 
@@ -215,95 +97,6 @@ var config = TomlSettings.Create(cfg => cfg
 Var various scenarios a logical combination of the default conversion sets with some custom converters may
 be the best choice.
 
-## Handle non TOML types via custom converters
-'TOML' has a very limited set of supported types. Assume you have some very simple CLR type
-used for config root object called `TableContainingMoney`:
-
-```C#
-public struct Money
-{
-    public string Currency { get; set; }
-    public decimal Ammount { get; set; }
-
-    public static Money Parse(string s) => new Money() { Ammount = decimal.Parse(s.Split(' ')[0]), Currency = s.Split(' ')[1] };
-    public override string ToString() => $"{this.Ammount} {this.Currency}";
-}
-
-public class TableContainingMoney
-{
-    public Money NotSupported { get; set; }
-}
-```
-
-With the default configuration 'Nett' would produce the following 'TOML' content
-```
-
-[NotSupported]
-Currency = "EUR"
-
-[NotSupported.Ammount]
-
-```
-
-This not very useful content is generated because of
-
-1. 'Nett' treats Money as a complex type and therefore writes it as a table
-2. 'Nett' cannot handle the `decimal` type by default.
-
-Reading back this generated 'TOML' will not produce the same data structure 
-as during the write.
-
-To fix this we can try to tell Nett how to handle the `decimal` type correctly.
-In this use case we decide we don't care about precision and just write is
-as a TomlFloat that has double precision. 
-
-```C#
-var obj = new TableContainingMoney()
-{
-    NotSupported = new Money() { Ammount = 9.99m, Currency = "EUR" }
-};
-
-var config = TomlSettings.Create(cfg => cfg
-    .ConfigureType<decimal>(type => type
-        .WithConversionFor<TomlFloat>(convert => convert
-            .ToToml(dec => (double)dec)
-            .FromToml(tf => (decimal)tf.Value))));
-
-var s = Toml.WriteString(obj, config);
-var read = Toml.ReadString<TableContainingMoney>(s, config);
-```
-
-Now 'Nett' will produce the following output:
-
-```
-
-[NotSupported]
-Currency = "EUR"
-Ammount = 9.99
-```
-
-This is already a lot better and will read back the correct data structure.
-But in our case the money type itself can serialize it to a string. So it's 
-functionality can be used to store the information more efficiently and not as 
-a TomlTable (complex data structure) by using 
-a different converter telling 'Nett' how to handle the 'Money' type itself rather
-than it's components.
-
-```C#
-var obj = new TableContainingMoney()
-{
-    NotSupported = new Money() { Ammount = 9.99m, Currency = "EUR" }
-};
-
-var config = TomlSettings.Create(cfg => cfg
-    .ConfigureType<Money>(type => type
-        .WithConversionFor<TomlString>(convert => convert
-            .ToToml(custom => custom.ToString())
-            .FromToml(tmlString => Money.Parse(tmlString.Value)))));
-
-var s = Toml.WriteString(obj, config);
-var read = Toml.ReadString<TableContainingMoney>(s, config);
-```
 
 Using this custom configuration will produce the following TOML which is more efficient and readable.
 ```
@@ -313,37 +106,6 @@ NotSupported = "9.99 EUR"
 Also the deserialization will work because the conversion specified both directions (FromlToml & ToToml). It is not
 required to always specify both conversion directions. E.g. if you only write TOML files, the 'FromToml' part
 could be omitted.
-
-## Ignore case when mapping TOML keys to CLR properties
-
-```csharp
-public class TestObject
-{
-    public string TestProp { get; set; }
-}
-
-var settings = TomlSettings.Create(s => s
-    .ConfigurePropertyMapping(m => m
-        .UseTargetPropertySelector(standardSelectors => standardSelectors.IgnoreCase)));
-var read = Toml.ReadString<TestObject>("TestProp='x'", settings);
-
-// read.TestProj == "x"
-```
-
-## Write TOML keys with casing differnt from CLR property name
-```csharp
-public class TestObject
-{
-    public string TestProp { get; set; }
-}
-
-var settings = TomlSettings.Create(s => s
-    .ConfigurePropertyMapping(m => m
-        .UseKeyGenerator(standardGenerators => standardGenerators.PascalCase)));
-var written = Toml.WriteString(new TestObject() { TestProp = "x" }, settings);
-
-// Resulting TOML: testProj = "x"
-```
 
 ## Ignore CLR object properties
 
