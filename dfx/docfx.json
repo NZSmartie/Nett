@@ -29,6 +29,7 @@
       {
         "files": [
           "howto/**/*.*",
+          "articles/**/*.*",
           "toc.yml",
           "*.md"
         ],
