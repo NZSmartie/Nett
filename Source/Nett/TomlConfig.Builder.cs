@@ -3,12 +3,18 @@
     using System;
     using System.Collections.Generic;
     using System.Linq.Expressions;
+    using System.Reflection;
     using Extensions;
     using Util;
     using static System.Diagnostics.Debug;
 
     public sealed partial class TomlSettings
     {
+        public interface IMappingBuilder<TCustom>
+        {
+            ITypeSettingsBuilder<TCustom> ToKey(string key);
+        }
+
         public interface ITypeSettingsBuilder<TCustom>
         {
             ITypeSettingsBuilder<TCustom> CreateInstance(Func<TCustom> func);
@@ -19,6 +25,14 @@
 
             ITypeSettingsBuilder<TCustom> WithConversionFor<TToml>(Action<IConversionSettingsBuilder<TCustom, TToml>> conv)
                 where TToml : TomlObject;
+
+            ITypeSettingsBuilder<TCustom> Include<TMember>(Expression<Func<TCustom, TMember>> selector);
+
+            ITypeSettingsBuilder<TCustom> Include(string memberName, BindingFlags bindFlags = BindingFlags.Public | BindingFlags.NonPublic);
+
+            IMappingBuilder<TCustom> Map<TMember>(Expression<Func<TCustom, TMember>> selector);
+
+            IMappingBuilder<TCustom> Map(string memberName, BindingFlags bindFlags = BindingFlags.Public | BindingFlags.NonPublic);
         }
 
         public interface ITableKeyMappingBuilder
