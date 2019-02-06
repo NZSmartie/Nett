@@ -28,7 +28,7 @@
 
             ITypeSettingsBuilder<TCustom> Include<TMember>(Expression<Func<TCustom, TMember>> selector);
 
-            ITypeSettingsBuilder<TCustom> Include(string memberName, BindingFlags bindFlags = BindingFlags.Public | BindingFlags.NonPublic);
+            ITypeSettingsBuilder<TCustom> Include(string memberName, BindingFlags bindFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
 
             IMappingBuilder<TCustom> Map<TMember>(Expression<Func<TCustom, TMember>> selector);
 
@@ -281,6 +281,30 @@
                 var propertyInfo = ReflectionUtil.GetPropertyInfo(accessor);
                 properties.Add(propertyInfo.Name);
                 return this;
+            }
+
+            public ITypeSettingsBuilder<TCustom> Include<TMember>(Expression<Func<TCustom, TMember>> selector)
+            {
+                var member = ReflectionUtil.GetSerMemberInfo(selector);
+                this.settings.explicitelyConfiguredMembers.Add(new SerializationInfo(member, member.GetKey()));
+                return this;
+            }
+
+            public ITypeSettingsBuilder<TCustom> Include(string memberName, BindingFlags bindFlags)
+            {
+                var sm = ReflectionUtil.GetSerMemberInfo(typeof(TCustom), memberName, bindFlags);
+                this.settings.explicitelyConfiguredMembers.Add(new SerializationInfo(sm, sm.GetKey()));
+                return this;
+            }
+
+            public IMappingBuilder<TCustom> Map<TMember>(Expression<Func<TCustom, TMember>> selector)
+            {
+                throw new NotImplementedException();
+            }
+
+            public IMappingBuilder<TCustom> Map(string memberName, BindingFlags bindFlags)
+            {
+                throw new NotImplementedException();
             }
 
             public ITypeSettingsBuilder<TCustom> TreatAsInlineTable()

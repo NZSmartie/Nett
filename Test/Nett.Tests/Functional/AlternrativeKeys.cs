@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using FluentAssertions;
+using Nett.Attributes;
 using Nett.Tests.Util;
 using Xunit;
 
@@ -69,11 +70,14 @@ namespace Nett.Tests.Functional
             var tml = Toml.WriteString(new FObj(), cfg);
 
             // Assert
-            tml.ShouldBeSemanticallyEquivalentTo("");
+            tml.ShouldBeSemanticallyEquivalentTo(@"
+X = 1
+PubField = ""Serialize all the things""
+");
         }
 
         [Fact]
-        public void Include_WithStringSelector_CanBeUsedToIncludeOtherwiseIgnoredMembers()
+        public void Include_WithStringSelector_CanBeUsedToIncludePrivateMembers()
         {
             // Arrange
             var cfg = TomlSettings.Create(c => c
@@ -82,6 +86,21 @@ namespace Nett.Tests.Functional
 
             // Act
             var tml = Toml.WriteString(new FObj(), cfg);
+
+            // Assert
+            tml.ShouldBeSemanticallyEquivalentTo(@"
+X = 1
+ThatsMine = ""You found me""");
+        }
+
+        [Fact]
+        public void WriteAttributedClass_WritesAllThePropertiesWithCorrectKeys()
+        {
+            // Arrange
+            var instance = new AObj();
+
+            // Act
+            var tml = Toml.WriteString(instance);
 
             // Assert
             tml.ShouldBeSemanticallyEquivalentTo("");
@@ -93,6 +112,18 @@ namespace Nett.Tests.Functional
 
             public string PubField = "Serialize all the things";
 
+            private string ThatsMine = "You found me";
+        }
+
+        public class AObj
+        {
+            [TomlMember(Key = "TheKey")]
+            public int X { get; set; } = 1;
+
+            [TomlMember]
+            public string PubField = "Serialize all the things";
+
+            [TomlMember]
             private string ThatsMine = "You found me";
         }
     }

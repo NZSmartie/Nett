@@ -251,17 +251,17 @@
 
             TomlTable tt = new TomlTable(root, tableType);
 
-            var props = root.Settings.GetSerializationProperties(obj.GetType());
+            var members = root.Settings.GetSerializationMembers(obj.GetType());
             var allObjects = new List<Tuple<string, TomlObject>>();
 
-            foreach (var p in props)
+            foreach (var m in members)
             {
-                object val = p.GetValue(obj, null);
+                object val = m.GetValue(obj);
                 if (val != null)
                 {
-                    TomlObject to = TomlObject.CreateFrom(root, val, p);
-                    AddComments(to, p);
-                    tt.AddRow(root.Settings.GetPropertyKey(p), to);
+                    TomlObject to = TomlObject.CreateFrom(root, val);
+                    // Has to be changed to new static to settings thing to work correctly !!! AddComments(to, m);
+                    tt.AddRow(m.Key, to);
                 }
             }
 

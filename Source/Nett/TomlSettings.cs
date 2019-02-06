@@ -13,6 +13,75 @@
         Append,
     }
 
+    internal struct SerializationMember
+    {
+        private readonly PropertyInfo pi;
+        private readonly FieldInfo fi;
+
+        public SerializationMember(PropertyInfo pi)
+        {
+            this.fi = null;
+            this.pi = pi;
+        }
+
+        public SerializationMember(FieldInfo fi)
+        {
+            this.pi = null;
+            this.fi = fi;
+        }
+
+        public object GetValue(object instance)
+        {
+            Assert(this.pi != null || this.fi != null);
+
+            if (this.pi != null)
+            {
+                return this.pi.GetValue(instance, null);
+            }
+            else
+            {
+                return this.fi.GetValue(instance);
+            }
+        }
+
+        public TomlKey GetKey()
+        {
+            Assert(this.pi != null || this.fi != null);
+
+            string keyString = this.pi?.Name ?? this.fi.Name;
+
+            return new TomlKey(keyString, TomlKey.KeyType.Bare);
+        }
+    }
+
+    internal struct SerializationInfo
+    {
+        private SerializationMember member;
+
+        public SerializationInfo(PropertyInfo pi, TomlKey key)
+        {
+            this.member = new SerializationMember(pi);
+            this.Key = key;
+        }
+
+        public SerializationInfo(FieldInfo fi, TomlKey key)
+        {
+            this.member = new SerializationMember(fi);
+            this.Key = key;
+        }
+
+        public SerializationInfo(SerializationMember si, TomlKey key)
+        {
+            this.member = si;
+            this.Key = key;
+        }
+
+        public TomlKey Key { get; }
+
+        public object GetValue(object instance)
+            => this.member.GetValue(instance);
+    }
+
     public sealed partial class TomlSettings
     {
         internal const BindingFlags PropBindingFlags = BindingFlags.Public | BindingFlags.Instance;
@@ -24,6 +93,7 @@
         private readonly HashSet<Type> inlineTableTypes = new HashSet<Type>();
         private readonly Dictionary<string, Type> tableKeyToTypeMappings = new Dictionary<string, Type>();
         private readonly Dictionary<Type, HashSet<string>> ignoredProperties = new Dictionary<Type, HashSet<string>>();
+        private readonly HashSet<SerializationInfo> explicitelyConfiguredMembers = new HashSet<SerializationInfo>();
 
         private IKeyGenerator keyGenerator = KeyGenerators.Instance.PropertyName;
         private ITargetPropertySelector mappingPropertySelector = TargetPropertySelectors.Instance.Exact;
@@ -91,15 +161,14 @@
             return TomlTable.TableTypes.Default;
         }
 
-        internal IEnumerable<PropertyInfo> GetSerializationProperties(Type t)
+        internal IEnumerable<SerializationInfo> GetSerializationMembers(Type t)
         {
             return t.GetProperties(PropBindingFlags)
                 .Where(pi => pi.GetIndexParameters().Length <= 0)
-                .Where(pi => !this.IsPropertyIgnored(t, pi));
+                .Where(pi => !this.IsPropertyIgnored(t, pi))
+                .Select(pi => new SerializationInfo(pi, new TomlKey(this.keyGenerator.GetKey(pi))))
+                .Concat(this.explicitelyConfiguredMembers);
         }
-
-        internal TomlKey GetPropertyKey(PropertyInfo pi)
-            => new TomlKey(this.keyGenerator.GetKey(pi));
 
         internal PropertyInfo TryGetMappingProperty(Type t, string key)
         {
