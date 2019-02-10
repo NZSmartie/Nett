@@ -32,7 +32,7 @@
 
             IMappingBuilder<TCustom> Map<TMember>(Expression<Func<TCustom, TMember>> selector);
 
-            IMappingBuilder<TCustom> Map(string memberName, BindingFlags bindFlags = BindingFlags.Public | BindingFlags.NonPublic);
+            IMappingBuilder<TCustom> Map(string memberName, BindingFlags bindFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
         }
 
         public interface ITableKeyMappingBuilder
@@ -277,34 +277,36 @@
 
             public ITypeSettingsBuilder<TCustom> IgnoreProperty<TProperty>(Expression<Func<TCustom, TProperty>> accessor)
             {
-                var properties = this.settings.ignoredProperties.AddIfNeeded(typeof(TCustom), def: new HashSet<string>());
+                var properties = this.settings.ignoredMembers.AddIfNeeded(typeof(TCustom), def: new HashSet<SerializationMember>());
                 var propertyInfo = ReflectionUtil.GetPropertyInfo(accessor);
-                properties.Add(propertyInfo.Name);
+                properties.Add(new SerializationMember(propertyInfo));
                 return this;
             }
 
             public ITypeSettingsBuilder<TCustom> Include<TMember>(Expression<Func<TCustom, TMember>> selector)
             {
                 var member = ReflectionUtil.GetSerMemberInfo(selector);
-                this.settings.explicitelyConfiguredMembers.Add(new SerializationInfo(member, member.GetKey()));
+                this.settings.explicitMembers.Add(new SerializationInfo(member, member.GetKey()));
                 return this;
             }
 
             public ITypeSettingsBuilder<TCustom> Include(string memberName, BindingFlags bindFlags)
             {
                 var sm = ReflectionUtil.GetSerMemberInfo(typeof(TCustom), memberName, bindFlags);
-                this.settings.explicitelyConfiguredMembers.Add(new SerializationInfo(sm, sm.GetKey()));
+                this.settings.explicitMembers.Add(new SerializationInfo(sm, sm.GetKey()));
                 return this;
             }
 
             public IMappingBuilder<TCustom> Map<TMember>(Expression<Func<TCustom, TMember>> selector)
             {
-                throw new NotImplementedException();
+                var sm = ReflectionUtil.GetSerMemberInfo(selector);
+                return new MappingBuilder(this, sm);
             }
 
             public IMappingBuilder<TCustom> Map(string memberName, BindingFlags bindFlags)
             {
-                throw new NotImplementedException();
+                var sm = ReflectionUtil.GetSerMemberInfo(typeof(TCustom), memberName, bindFlags);
+                return new MappingBuilder(this, sm);
             }
 
             public ITypeSettingsBuilder<TCustom> TreatAsInlineTable()
@@ -318,6 +320,24 @@
             {
                 conv(new ConversionSettingsBuilder<TCustom, TToml>(this.converters));
                 return this;
+            }
+
+            private sealed class MappingBuilder : IMappingBuilder<TCustom>
+            {
+                private readonly SerializationMember serMember;
+                private readonly TypeSettingsBuilder<TCustom> typeBuilder;
+
+                public MappingBuilder(TypeSettingsBuilder<TCustom> typeBuilder, SerializationMember serMember)
+                {
+                    this.typeBuilder = typeBuilder;
+                    this.serMember = serMember;
+                }
+
+                public ITypeSettingsBuilder<TCustom> ToKey(string key)
+                {
+                    this.typeBuilder.settings.explicitMembers.Add(new SerializationInfo(this.serMember, new TomlKey(key)));
+                    return this.typeBuilder;
+                }
             }
         }
     }

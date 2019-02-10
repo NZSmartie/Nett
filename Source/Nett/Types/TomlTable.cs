@@ -251,6 +251,7 @@
 
             TomlTable tt = new TomlTable(root, tableType);
 
+            //root.Settings.BuildStaticConfig(obj);
             var members = root.Settings.GetSerializationMembers(obj.GetType());
             var allObjects = new List<Tuple<string, TomlObject>>();
 

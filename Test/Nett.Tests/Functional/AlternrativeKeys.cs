@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using FluentAssertions;
-using Nett.Attributes;
+﻿using Nett.Attributes;
 using Nett.Tests.Util;
 using Xunit;
 
@@ -24,7 +18,8 @@ namespace Nett.Tests.Functional
             var tml = Toml.WriteString(new FObj(), cfg);
 
             // Assert
-            tml.ShouldBeSemanticallyEquivalentTo("");
+            tml.ShouldBeSemanticallyEquivalentTo(@"
+TheKey=1");
         }
 
         [Fact]
@@ -39,7 +34,9 @@ namespace Nett.Tests.Functional
             var tml = Toml.WriteString(new FObj(), cfg);
 
             // Assert
-            tml.ShouldBeSemanticallyEquivalentTo("");
+            tml.ShouldBeSemanticallyEquivalentTo(@"
+X=1
+TheKey=""Youfoundme""");
         }
 
         [Fact]
@@ -54,7 +51,7 @@ namespace Nett.Tests.Functional
             var tml = Toml.WriteString(new FObj(), cfg);
 
             // Assert
-            tml.ShouldBeSemanticallyEquivalentTo("");
+            tml.ShouldBeSemanticallyEquivalentTo("TheKey=1");
         }
 
 
@@ -103,7 +100,10 @@ ThatsMine = ""You found me""");
             var tml = Toml.WriteString(instance);
 
             // Assert
-            tml.ShouldBeSemanticallyEquivalentTo("");
+            tml.ShouldBeSemanticallyEquivalentTo(@"
+TheKey = 1
+PubField =""Serialize all the things""
+ThatsMine=""You found me""");
         }
 
         public class FObj

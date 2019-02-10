@@ -30,6 +30,9 @@
             this.fi = fi;
         }
 
+        public MemberInfo MemberInfo
+            => this.pi ?? (MemberInfo)this.fi;
+
         public object GetValue(object instance)
         {
             Assert(this.pi != null || this.fi != null);
@@ -52,11 +55,16 @@
 
             return new TomlKey(keyString, TomlKey.KeyType.Bare);
         }
+
+        public bool Is(MemberInfo pi)
+            => this.pi != null && this.pi == pi;
     }
 
     internal struct SerializationInfo
     {
         private SerializationMember member;
+
+        public SerializationMember Member => this.member;
 
         public SerializationInfo(PropertyInfo pi, TomlKey key)
         {
@@ -76,10 +84,20 @@
             this.Key = key;
         }
 
+        public static SerializationInfo CreateFromMemberInfo(MemberInfo mi, TomlKey key)
+        {
+            if (mi is PropertyInfo pi) { return new SerializationInfo(pi, key); }
+            else if (mi is FieldInfo fi) { return new SerializationInfo(fi, key); }
+            else { throw new ArgumentException($"Cannot create serialization info from unsupported member info type '{mi.GetType()}'."); }
+        }
+
         public TomlKey Key { get; }
 
         public object GetValue(object instance)
             => this.member.GetValue(instance);
+
+        public bool Is(MemberInfo pi)
+            => this.member.Is(pi);
     }
 
     public sealed partial class TomlSettings
@@ -92,8 +110,8 @@
         private readonly ConverterCollection converters = new ConverterCollection();
         private readonly HashSet<Type> inlineTableTypes = new HashSet<Type>();
         private readonly Dictionary<string, Type> tableKeyToTypeMappings = new Dictionary<string, Type>();
-        private readonly Dictionary<Type, HashSet<string>> ignoredProperties = new Dictionary<Type, HashSet<string>>();
-        private readonly HashSet<SerializationInfo> explicitelyConfiguredMembers = new HashSet<SerializationInfo>();
+        private readonly Dictionary<Type, HashSet<SerializationMember>> ignoredMembers = new Dictionary<Type, HashSet<SerializationMember>>();
+        private readonly HashSet<SerializationInfo> explicitMembers = new HashSet<SerializationInfo>();
 
         private IKeyGenerator keyGenerator = KeyGenerators.Instance.PropertyName;
         private ITargetPropertySelector mappingPropertySelector = TargetPropertySelectors.Instance.Exact;
@@ -163,17 +181,21 @@
 
         internal IEnumerable<SerializationInfo> GetSerializationMembers(Type t)
         {
-            return t.GetProperties(PropBindingFlags)
-                .Where(pi => pi.GetIndexParameters().Length <= 0)
-                .Where(pi => !this.IsPropertyIgnored(t, pi))
-                .Select(pi => new SerializationInfo(pi, new TomlKey(this.keyGenerator.GetKey(pi))))
-                .Concat(this.explicitelyConfiguredMembers);
+            return StaticTypeMetaData.GetSerializationMembers(t, this.keyGenerator)
+                .Where(si => IncludeMember(si.Member.MemberInfo))
+                .Concat(this.explicitMembers);
+
+            bool IncludeMember(MemberInfo mi)
+            {
+                return !this.IsMemberIgnored(t, mi)
+                    && !this.explicitMembers.Any(si => si.Is(mi));
+            }
         }
 
         internal PropertyInfo TryGetMappingProperty(Type t, string key)
         {
             var pi = this.mappingPropertySelector.TryGetTargetProperty(key, t);
-            return pi != null && !this.IsPropertyIgnored(t, pi) ? pi : null;
+            return pi != null && !this.IsMemberIgnored(t, pi) ? pi : null;
         }
 
         internal ITomlConverter TryGetConverter(Type from, Type to) =>
@@ -195,19 +217,19 @@
         internal ITomlConverter TryGetToTomlConverter(Type fromType) =>
             this.converters.TryGetLatestToTomlConverter(fromType);
 
-        private bool IsPropertyIgnored(Type ownerType, PropertyInfo pi)
+        private bool IsMemberIgnored(Type ownerType, MemberInfo mi)
         {
             Assert(ownerType != null);
-            Assert(pi != null);
+            Assert(mi != null);
 
-            HashSet<string> ignored;
-
-            bool contained = UserTypeMetaData.IsPropertyIgnored(ownerType, pi);
-            if (contained) { return true; }
-
-            if (this.ignoredProperties.TryGetValue(ownerType, out ignored))
+            if (StaticTypeMetaData.IsMemberIgnored(ownerType, mi))
             {
-                return ignored.Contains(pi.Name);
+                return true;
+            }
+
+            if (this.ignoredMembers.TryGetValue(ownerType, out var ignored))
+            {
+                return ignored.Any(m => m.Is(mi));
             }
 
             return false;

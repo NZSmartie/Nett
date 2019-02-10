@@ -1,24 +1,33 @@
-﻿namespace Nett
-{
-    using System;
-    using System.Collections.Concurrent;
-    using System.Collections.Generic;
-    using System.Linq;
-    using System.Reflection;
-    using Util;
+﻿using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
+using Nett.Attributes;
+using Nett.Util;
 
-    internal static class UserTypeMetaData
+namespace Nett
+{
+    internal static class StaticTypeMetaData
     {
         private static readonly ConcurrentDictionary<Type, MetaDataInfo> MetaData = new ConcurrentDictionary<Type, MetaDataInfo>();
 
-        public static bool IsPropertyIgnored(Type ownerType, PropertyInfo pi)
+        public static IEnumerable<SerializationInfo> GetSerializationMembers(Type type, IKeyGenerator keyGen)
         {
-            if (ownerType == null) { throw new ArgumentNullException(nameof(ownerType)); }
-            if (pi == null) { throw new ArgumentNullException(nameof(pi)); }
+            EnsureMetaDataInitialized(type);
 
-            EnsureMetaDataInitialized(ownerType);
+            var data = MetaData[type];
 
-            return MetaData[ownerType].IgnoredProperties.Contains(pi.Name);
+            return data.ImplicitMembers
+                .Select(sm => new SerializationInfo(sm, new TomlKey(keyGen.GetKey(sm.MemberInfo))))
+                .Concat(data.ExplicitMembers);
+        }
+
+        public static bool IsMemberIgnored(Type t, MemberInfo mi)
+        {
+            EnsureMetaDataInitialized(t);
+
+            return MetaData[t].IgnoredMembes.Any(m => m.Is(mi));
         }
 
         private static void EnsureMetaDataInitialized(Type t)
@@ -26,25 +35,70 @@
 
         private static MetaDataInfo ProcessType(Type t)
         {
-            var ignored = ProcessIgnoredProperties(t);
+            var implicitMembers = ResolveImplicitMembers(t);
+            var explicitMembers = ResolveExplicitMembers(t);
+            var ignoredMembers = ResolveIgnoredMembers(t);
 
-            return new MetaDataInfo(ignored);
+            return new MetaDataInfo(implicitMembers, explicitMembers, ignoredMembers);
         }
 
-        private static IEnumerable<string> ProcessIgnoredProperties(Type t)
+        private static IEnumerable<SerializationMember> ResolveImplicitMembers(Type t)
         {
-            var attributes = ReflectionUtil.GetPropertiesWithAttribute<TomlIgnoreAttribute>(t);
-            return attributes.Select(pi => pi.Name);
+            return t.GetProperties(TomlSettings.PropBindingFlags)
+                .Where(IncludeMember)
+                .Select(pi => new SerializationMember(pi));
+
+            bool IncludeMember(PropertyInfo pi)
+                => ReflectionUtil.GetCustomAttribute<TomlIgnoreAttribute>(pi, inherit: true) == null
+                && ReflectionUtil.GetCustomAttribute<TomlMember>(pi, inherit: true) == null;
+        }
+
+        private static IEnumerable<SerializationMember> ResolveIgnoredMembers(Type t)
+        {
+            return t.GetProperties(TomlSettings.PropBindingFlags)
+                .Where(pi => ReflectionUtil.GetCustomAttribute<TomlIgnoreAttribute>(pi, inherit: true) != null)
+                .Select(pi => new SerializationMember(pi));
+        }
+
+        private static IEnumerable<SerializationInfo> ResolveExplicitMembers(Type t)
+        {
+            var members = t.GetMembers(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+
+            foreach (var m in members)
+            {
+                var tm = ReflectionUtil.GetCustomAttribute<TomlMember>(m);
+                if (tm != null)
+                {
+                    var key = string.IsNullOrWhiteSpace(tm.Key)
+
+                        ? new TomlKey(m.Name, TomlKey.KeyType.Bare)
+                        : new TomlKey(tm.Key);
+
+                    yield return SerializationInfo.CreateFromMemberInfo(m, key);
+                }
+            }
         }
 
         private sealed class MetaDataInfo
         {
-            public MetaDataInfo(IEnumerable<string> ignoredProperties)
+
+            public MetaDataInfo(
+                IEnumerable<SerializationMember> implicitMembers,
+                IEnumerable<SerializationInfo> explicitMembers,
+                IEnumerable<SerializationMember> ignoredMembers)
             {
-                this.IgnoredProperties = new HashSet<string>(ignoredProperties);
+                this.ImplicitMembers = new HashSet<SerializationMember>(implicitMembers);
+                this.ExplicitMembers = new HashSet<SerializationInfo>(explicitMembers);
+                this.IgnoredMembes = new HashSet<SerializationMember>(ignoredMembers);
             }
 
-            public HashSet<string> IgnoredProperties { get; }
+            public HashSet<SerializationMember> ImplicitMembers { get; }
+
+            public HashSet<SerializationInfo> ExplicitMembers { get; }
+
+            public HashSet<SerializationMember> IgnoredMembes { get; }
         }
+
+
     }
 }

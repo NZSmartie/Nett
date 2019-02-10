@@ -76,6 +76,12 @@
             throw new Exception($"Member '{memberName}' was not found on type '{ownerType}'.");
         }
 
+        public static T GetCustomAttribute<T>(MemberInfo member,  bool inherit = false)
+            where T : Attribute
+        {
+            return (T)member.GetCustomAttributes(typeof(T), inherit).SingleOrDefault();
+        }
+
         public static IEnumerable<PropertyInfo> GetPropertiesWithAttribute<TAttribute>(Type owner)
             where TAttribute : Attribute
             => owner.GetProperties().Where(a => a.IsDefined(typeof(TAttribute), false));
