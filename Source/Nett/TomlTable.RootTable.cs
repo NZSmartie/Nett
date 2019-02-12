@@ -44,7 +44,7 @@
                     if (val != null)
                     {
                         TomlObject to = TomlObject.CreateFrom(tt, val);
-                        // Has to be fixed for ... AddComments(to, p);
+                        to.AddComments(settings.GetComments(t, m.Member));
                         tt.AddRow(m.Key, to);
                     }
                 }

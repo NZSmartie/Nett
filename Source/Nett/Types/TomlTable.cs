@@ -5,7 +5,6 @@
     using System.Collections.Generic;
     using System.Diagnostics;
     using System.Linq;
-    using System.Reflection;
     using Extensions;
     using Nett.Writer;
     using static System.Diagnostics.Debug;
@@ -251,7 +250,6 @@
 
             TomlTable tt = new TomlTable(root, tableType);
 
-            //root.Settings.BuildStaticConfig(obj);
             var members = root.Settings.GetSerializationMembers(obj.GetType());
             var allObjects = new List<Tuple<string, TomlObject>>();
 
@@ -261,7 +259,7 @@
                 if (val != null)
                 {
                     TomlObject to = TomlObject.CreateFrom(root, val);
-                    // Has to be changed to new static to settings thing to work correctly !!! AddComments(to, m);
+                    to.AddComments(root.Settings.GetComments(obj.GetType(), m.Member));
                     tt.AddRow(m.Key, to);
                 }
             }
@@ -368,15 +366,6 @@
 
         protected virtual void OnRowValueSet(string rowKey)
         {
-        }
-
-        private static void AddComments(TomlObject obj, PropertyInfo pi)
-        {
-            var comments = pi.GetCustomAttributes(typeof(TomlCommentAttribute), false).Cast<TomlCommentAttribute>();
-            foreach (var c in comments)
-            {
-                obj.AddComment(new TomlComment(c.Comment, c.Location));
-            }
         }
 
         private static bool ScopeCreatingType(TomlObject obj) =>

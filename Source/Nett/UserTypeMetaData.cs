@@ -23,6 +23,17 @@ namespace Nett
                 .Concat(data.ExplicitMembers);
         }
 
+        public static IEnumerable<TomlComment> GetComments(Type type, SerializationMember mi)
+        {
+            EnsureMetaDataInitialized(type);
+            if (MetaData[type].Comments.TryGetValue(mi, out var c))
+            {
+                return c;
+            }
+
+            return Enumerable.Empty<TomlComment>();
+        }
+
         public static bool IsMemberIgnored(Type t, MemberInfo mi)
         {
             EnsureMetaDataInitialized(t);
@@ -35,11 +46,22 @@ namespace Nett
 
         private static MetaDataInfo ProcessType(Type t)
         {
-            var implicitMembers = ResolveImplicitMembers(t);
-            var explicitMembers = ResolveExplicitMembers(t);
-            var ignoredMembers = ResolveIgnoredMembers(t);
+            var implicitMembers = new HashSet<SerializationMember>(ResolveImplicitMembers(t));
+            var explicitMembers = new HashSet<SerializationInfo>(ResolveExplicitMembers(t));
+            var ignoredMembers = new HashSet<SerializationMember>(ResolveIgnoredMembers(t));
+            var comments = ResolveComments(implicitMembers.Concat(explicitMembers.Select(em => em.Member)));
 
-            return new MetaDataInfo(implicitMembers, explicitMembers, ignoredMembers);
+            return new MetaDataInfo(implicitMembers, explicitMembers, ignoredMembers, comments);
+        }
+
+        private static Dictionary<SerializationMember, List<TomlComment>> ResolveComments(IEnumerable<SerializationMember> members)
+        {
+            return members.ToDictionary(m => m, GetComments);
+
+            List<TomlComment> GetComments(SerializationMember sm)
+                => ReflectionUtil.GetCustomAttributes<TomlCommentAttribute>(sm.MemberInfo, inherit: true)
+                .Select(ca => new TomlComment(ca.Comment, ca.Location))
+                .ToList();
         }
 
         private static IEnumerable<SerializationMember> ResolveImplicitMembers(Type t)
@@ -49,7 +71,8 @@ namespace Nett
                 .Select(pi => new SerializationMember(pi));
 
             bool IncludeMember(PropertyInfo pi)
-                => ReflectionUtil.GetCustomAttribute<TomlIgnoreAttribute>(pi, inherit: true) == null
+                => pi.GetIndexParameters().Length <= 0
+                && ReflectionUtil.GetCustomAttribute<TomlIgnoreAttribute>(pi, inherit: true) == null
                 && ReflectionUtil.GetCustomAttribute<TomlMember>(pi, inherit: true) == null;
         }
 
@@ -83,13 +106,15 @@ namespace Nett
         {
 
             public MetaDataInfo(
-                IEnumerable<SerializationMember> implicitMembers,
-                IEnumerable<SerializationInfo> explicitMembers,
-                IEnumerable<SerializationMember> ignoredMembers)
+                HashSet<SerializationMember> implicitMembers,
+                HashSet<SerializationInfo> explicitMembers,
+                HashSet<SerializationMember> ignoredMembers,
+                Dictionary<SerializationMember, List<TomlComment>> comments)
             {
-                this.ImplicitMembers = new HashSet<SerializationMember>(implicitMembers);
-                this.ExplicitMembers = new HashSet<SerializationInfo>(explicitMembers);
-                this.IgnoredMembes = new HashSet<SerializationMember>(ignoredMembers);
+                this.ImplicitMembers = implicitMembers;
+                this.ExplicitMembers = explicitMembers;
+                this.IgnoredMembes = ignoredMembers;
+                this.Comments = comments;
             }
 
             public HashSet<SerializationMember> ImplicitMembers { get; }
@@ -97,8 +122,8 @@ namespace Nett
             public HashSet<SerializationInfo> ExplicitMembers { get; }
 
             public HashSet<SerializationMember> IgnoredMembes { get; }
+
+            public Dictionary<SerializationMember, List<TomlComment>> Comments { get; }
         }
-
-
     }
 }

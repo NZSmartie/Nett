@@ -192,6 +192,9 @@
             }
         }
 
+        internal IEnumerable<TomlComment> GetComments(Type type, SerializationMember m)
+            => StaticTypeMetaData.GetComments(type, m);
+
         internal PropertyInfo TryGetMappingProperty(Type t, string key)
         {
             var pi = this.mappingPropertySelector.TryGetTargetProperty(key, t);
