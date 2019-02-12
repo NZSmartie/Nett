@@ -1,4 +1,5 @@
-﻿using Nett.Attributes;
+﻿using FluentAssertions;
+using Nett.Attributes;
 using Nett.Tests.Util;
 using Xunit;
 
@@ -20,6 +21,21 @@ namespace Nett.Tests.Functional
             // Assert
             tml.ShouldBeSemanticallyEquivalentTo(@"
 TheKey=1");
+        }
+
+        [Fact]
+        public void UseCustomKey_WithLamdaForPropSelector_DeserializationMapsBackToProperty()
+        {
+            // Arrange
+            var cfg = TomlSettings.Create(c => c
+                .ConfigureType<FObj>(tc => tc
+                    .Map(fo => fo.X).ToKey("TheKey")));
+
+            // Act
+            var obj = Toml.ReadString<FObj>("TheKey = 3", cfg);
+
+            // Assert
+            obj.X.Should().Be(3);
         }
 
         [Fact]

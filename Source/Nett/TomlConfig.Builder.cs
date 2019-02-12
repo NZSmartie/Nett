@@ -286,14 +286,16 @@
             public ITypeSettingsBuilder<TCustom> Include<TMember>(Expression<Func<TCustom, TMember>> selector)
             {
                 var member = ReflectionUtil.GetSerMemberInfo(selector);
-                this.settings.explicitMembers.Add(new SerializationInfo(member, member.GetKey()));
+                var key = member.GetKey();
+                this.settings.explicitMembers.Add(new SerializationInfo(member, key), key.Value);
                 return this;
             }
 
             public ITypeSettingsBuilder<TCustom> Include(string memberName, BindingFlags bindFlags)
             {
                 var sm = ReflectionUtil.GetSerMemberInfo(typeof(TCustom), memberName, bindFlags);
-                this.settings.explicitMembers.Add(new SerializationInfo(sm, sm.GetKey()));
+                var key = sm.GetKey();
+                this.settings.explicitMembers.Add(new SerializationInfo(sm, key), key.Value);
                 return this;
             }
 
@@ -335,7 +337,7 @@
 
                 public ITypeSettingsBuilder<TCustom> ToKey(string key)
                 {
-                    this.typeBuilder.settings.explicitMembers.Add(new SerializationInfo(this.serMember, new TomlKey(key)));
+                    this.typeBuilder.settings.explicitMembers.Add(new SerializationInfo(this.serMember, new TomlKey(key)), key);
                     return this.typeBuilder;
                 }
             }

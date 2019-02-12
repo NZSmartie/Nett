@@ -179,11 +179,12 @@
             var result = this.Root.Settings.GetActivatedInstance(t);
             foreach (var r in this.rows)
             {
-                var targetProperty = this.Root.Settings.TryGetMappingProperty(result.GetType(), r.Key.Value);
-                if (targetProperty != null)
+                var targetMember = this.Root.Settings.TryGetMappedMember(result.GetType(), r.Key.Value);
+                if (targetMember.HasValue)
                 {
-                    Type keyMapingTargetType = this.Root.Settings.TryGetMappedType(r.Key.Value, targetProperty);
-                    targetProperty.SetValue(result, r.Value.Get(keyMapingTargetType ?? targetProperty.PropertyType), null);
+                    Type keyMapingTargetType = this.Root.Settings.TryGetMappedType(r.Key.Value, targetMember);
+                    var value = r.Value.Get(keyMapingTargetType ?? targetMember.Value.MemberType);
+                    targetMember.Value.SetValue(result, value);
                 }
             }
 

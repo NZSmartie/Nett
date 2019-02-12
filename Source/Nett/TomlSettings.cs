@@ -4,7 +4,7 @@
     using System.Collections.Generic;
     using System.Linq;
     using System.Reflection;
-
+    using Nett.Collections;
     using static System.Diagnostics.Debug;
 
     internal enum TomlCommentLocation
@@ -33,6 +33,9 @@
         public MemberInfo MemberInfo
             => this.pi ?? (MemberInfo)this.fi;
 
+        public Type MemberType
+            => this.pi?.PropertyType ?? this.fi.FieldType;
+
         public object GetValue(object instance)
         {
             Assert(this.pi != null || this.fi != null);
@@ -58,6 +61,12 @@
 
         public bool Is(MemberInfo pi)
             => this.pi != null && this.pi == pi;
+
+        public void SetValue(object instance, object value)
+        {
+            if (this.pi != null) { this.pi.SetValue(instance, value, null); }
+            else { this.fi.SetValue(instance, value); }
+        }
     }
 
     internal struct SerializationInfo
@@ -111,7 +120,7 @@
         private readonly HashSet<Type> inlineTableTypes = new HashSet<Type>();
         private readonly Dictionary<string, Type> tableKeyToTypeMappings = new Dictionary<string, Type>();
         private readonly Dictionary<Type, HashSet<SerializationMember>> ignoredMembers = new Dictionary<Type, HashSet<SerializationMember>>();
-        private readonly HashSet<SerializationInfo> explicitMembers = new HashSet<SerializationInfo>();
+        private readonly Map<SerializationInfo, string> explicitMembers = new Map<SerializationInfo, string>();
 
         private IKeyGenerator keyGenerator = KeyGenerators.Instance.PropertyName;
         private ITargetPropertySelector mappingPropertySelector = TargetPropertySelectors.Instance.Exact;
@@ -183,33 +192,36 @@
         {
             return StaticTypeMetaData.GetSerializationMembers(t, this.keyGenerator)
                 .Where(si => IncludeMember(si.Member.MemberInfo))
-                .Concat(this.explicitMembers);
+                .Concat(this.explicitMembers.Forward.Keys);
 
             bool IncludeMember(MemberInfo mi)
             {
                 return !this.IsMemberIgnored(t, mi)
-                    && !this.explicitMembers.Any(si => si.Is(mi));
+                    && !this.explicitMembers.Forward.Keys.Any(si => si.Is(mi));
             }
         }
 
         internal IEnumerable<TomlComment> GetComments(Type type, SerializationMember m)
             => StaticTypeMetaData.GetComments(type, m);
 
-        internal PropertyInfo TryGetMappingProperty(Type t, string key)
+        internal SerializationMember? TryGetMappedMember(Type t, string key)
         {
+            if (this.explicitMembers.Reverse.TryGetValue(key, out var si))
+            {
+                return si.Member;
+            }
+
             var pi = this.mappingPropertySelector.TryGetTargetProperty(key, t);
-            return pi != null && !this.IsMemberIgnored(t, pi) ? pi : null;
+            return pi != null && !this.IsMemberIgnored(t, pi) ? new SerializationMember(pi) : (SerializationMember?)null;
         }
 
         internal ITomlConverter TryGetConverter(Type from, Type to) =>
             this.converters.TryGetConverter(from, to);
 
-        internal Type TryGetMappedType(string key, PropertyInfo target)
+        internal Type TryGetMappedType(string key, SerializationMember? target)
         {
-            Type mapped;
-            bool noTypeInfoAvailable = target == null;
-            bool targetCanHoldMappedTable = noTypeInfoAvailable || target.PropertyType == Types.ObjectType;
-            if (targetCanHoldMappedTable && this.tableKeyToTypeMappings.TryGetValue(key, out mapped))
+            bool targetCanHoldMappedTable = !target.HasValue || target.Value.MemberType == Types.ObjectType;
+            if (targetCanHoldMappedTable && this.tableKeyToTypeMappings.TryGetValue(key, out var mapped))
             {
                 return mapped;
             }
