@@ -5,7 +5,7 @@ using Xunit;
 
 namespace Nett.Tests.Functional
 {
-    public sealed class AlternrativeKeys
+    public sealed class AlternativeKeyTests
     {
         [Fact]
         public void UseCustomKey_WithLamdaForPropSelector_SerializationUsesThatKey()
@@ -56,6 +56,24 @@ TheKey=""Youfoundme""");
         }
 
         [Fact]
+        public void UseCustomKey_WithStringPrivateFieldSelector_DeserializationUsesThatKey()
+        {
+            // Arrange
+            var cfg = TomlSettings.Create(c => c
+                .ConfigureType<FObj>(tc => tc
+                    .Map("ThatsMine").ToKey("TheKey")));
+
+            // Act
+            var obj = Toml.ReadString<FObj>(@"
+X=2
+TheKey=""tmlcontent""", cfg);
+
+            // Assert
+            obj.X.Should().Be(2);
+            obj.ThatsMineAccessor.Should().Be("tmlcontent");
+        }
+
+        [Fact]
         public void UseCustomKey_WithStringPropSelector_SerializationUsesThatKey()
         {
             // Arrange
@@ -90,6 +108,25 @@ PubField = ""Serialize all the things""
         }
 
         [Fact]
+        public void Include_WithMemberSelector_CanBeUsedToDeserializeOtherwiseIgnoredMembers()
+        {
+            // Arrange
+            var cfg = TomlSettings.Create(c => c
+                .ConfigureType<FObj>(tc => tc
+                    .Include(fo => fo.PubField)));
+
+            // Act
+            var obj = Toml.ReadString<FObj>(@"
+X = 2
+PubField = ""thats different""
+", cfg);
+
+            // Assert
+            obj.X.Should().Be(2);
+            obj.PubField.Should().Be("thats different");
+        }
+
+        [Fact]
         public void Include_WithStringSelector_CanBeUsedToIncludePrivateMembers()
         {
             // Arrange
@@ -116,10 +153,26 @@ ThatsMine = ""You found me""");
             var tml = Toml.WriteString(instance);
 
             // Assert
-            tml.ShouldBeSemanticallyEquivalentTo(@"
-TheKey = 1
-PubField =""Serialize all the things""
-ThatsMine=""You found me""");
+            tml.Replace("\r\n", "\n").Trim().Should().Be(@"
+'The Key' = 1
+PubField = ""Serialize all the things""
+ThatsMine = ""You found me""".Trim());
+        }
+
+        [Fact]
+        public void WriteAttributedClass_ReadsAllThePropertiesCorrectly()
+        {
+            // Arrange
+            // Act
+            var obj = Toml.ReadString<AObj>(@"
+'The Key' = 2
+PubField =""pubfield was read correctly""
+ThatsMine=""thatsmine read correctly""");
+
+            // Assert
+            obj.X.Should().Be(2);
+            obj.PubField.Should().Be("pubfield was read correctly");
+            obj.ThatsMineAccessor.Should().Be("thatsmine read correctly");
         }
 
         public class FObj
@@ -129,11 +182,14 @@ ThatsMine=""You found me""");
             public string PubField = "Serialize all the things";
 
             private string ThatsMine = "You found me";
+
+            [TomlIgnore]
+            public string ThatsMineAccessor => this.ThatsMine;
         }
 
         public class AObj
         {
-            [TomlMember(Key = "TheKey")]
+            [TomlMember(Key = "The Key")]
             public int X { get; set; } = 1;
 
             [TomlMember]
@@ -141,6 +197,9 @@ ThatsMine=""You found me""");
 
             [TomlMember]
             private string ThatsMine = "You found me";
+
+            [TomlIgnore]
+            public string ThatsMineAccessor => this.ThatsMine;
         }
     }
 }
